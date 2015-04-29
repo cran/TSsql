@@ -2,9 +2,12 @@ import(TSdbi)
 import(methods)  
 import(DBI)      
 #importFrom("stats", "tsp")
-import("tframe")
 importFrom("stats", "start")
 importFrom("stats", "end")
+
+import("tframe")
+import("tframePlus")
+import("zoo")
 
 ## not generic
 export(
@@ -20,14 +23,4 @@ export(
   "createTSdbTables",
   "removeTSdbTables"
   )
-
-## S4 generics
-export(
-   "dropTStable"
-   )
-
-## S4 methods
-exportMethods(
-   "dropTStable"
-   )
 

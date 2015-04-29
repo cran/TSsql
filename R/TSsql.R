@@ -139,7 +139,7 @@ TSputSQL <- function(x, serIDs=seriesNames(x), con, Table=NULL,
     else stop("ts frequency not supported.")  
     }
   else if (inherits(x, "zoo")) {
-    require("zoo")
+    ##require("zoo")
     #  might do better than this
     if (is.null(Table)) stop("Table must be specified for zoo series.")
     d <- time(x) 
@@ -211,7 +211,9 @@ TSgetSQL <- function(serIDs, con, TSrepresentation=getOption("TSrepresentation")
        TSdescription=FALSE, TSdoc=FALSE, TSlabel=FALSE, TSsource=TRUE,
        vintage=getOption("TSvintage"), panel=getOption("TSpanel")) {
   # so far I think this is generic to all SQL.
-  if(is.null(TSrepresentation)) TSrepresentation <- "default"
+
+  # default is ts if the table is in  c("A", "Q", "M","S") and zoo otherwise.
+  # default is used for retrieval and any conversion is done after.
 
   if ( 1 < sum(c(length(serIDs), length(panel), length(vintage)) > 1))
    stop("Only one of serIDs, panel, or vintage can have length greater than 1.")
@@ -256,73 +258,65 @@ TSgetSQL <- function(serIDs, con, TSrepresentation=getOption("TSrepresentation")
 	q <- q[1,]
 	}
 
-    if  (i == 1) {
-       tbl <- q$tbl
-       useZoo <- if ((TSrepresentation == "zoo") | 
-                   !(tbl %in% c("A", "Q", "M","S"))) TRUE else FALSE 
-       if(useZoo && !require("zoo")) stop("zoo package is required.")
-       }
+    if  (i == 1)  tbl <- q$tbl
     else if(q$tbl != tbl) 
        stop("Series must all have the same frequency or time representation.")
+
     rp <- c(rp, q$refperiod)
 
     if (tbl=="A") 
       {res <- Q(paste("SELECT year, v FROM ", tbNm(hV, "A", vintage[i]), 
                 whereT[j], " order by year;"))
        r   <- ts(res[,2], start=c(res[1,1], 1), frequency=1) 
-       if(useZoo) r <- as.zoo(r)
      }
     else if (tbl=="Q")  
       {res <- Q(paste("SELECT year, period, v FROM ", tbNm(hV, "Q", vintage[i]),
                 whereT[j], " order by year, period;"))
        r   <- ts(res[,3], start=c(res[1,1:2]), frequency=4) 	 
-       if(useZoo) r <- as.zoo(r)
       }
     else if (tbl=="M")
       {res <- Q(paste("SELECT year, period, v FROM ", tbNm(hV, "M", vintage[i]),
                 whereT[j], " order by year, period;"))
        r   <- ts(res[,3], start=c(res[1,1:2]), frequency=12)	 
-       if(useZoo) r <- as.zoo(r)
       }
     else if (tbl=="W") 
       {res <- Q(paste("SELECT date, period, v FROM ", tbNm(hV, "W", vintage[i]),
                 whereT[j], " order by date;"))
-       r   <- zoo(as.numeric(res[,3]), as.Date(res[,1]))
+       r   <- zoo::zoo(as.numeric(res[,3]), as.Date(res[,1]))
        # period is as.int(res[,2]) 	 
       }
     else if (tbl=="B") 
       {res <- Q(paste("SELECT date, period, v FROM ", tbNm(hV, "B", vintage[i]),
                 whereT[j], " order by date;"))
-       r   <- zoo(as.numeric(res[,3]), as.Date(res[,1]))
+       r   <- zoo::zoo(as.numeric(res[,3]), as.Date(res[,1]))
        # period is as.int(res[,2]) 	 
       }
     else if (tbl=="D")  
       {res <- Q(paste("SELECT date, period, v FROM ", tbNm(hV, "D", vintage[i]),
                 whereT[j], " order by date;"))
-       r   <- zoo(as.numeric(res[,3]), as.Date(res[,1]))
+       r   <- zoo::zoo(as.numeric(res[,3]), as.Date(res[,1]))
        # period is as.int(res[,2]) 	 
       }
     else if (tbl=="S")    
       {res <- Q(paste("SELECT year, period, v FROM ", tbNm(hV, "S", vintage[i]),
                 whereT[j], " order by year, period;"))
        r   <- ts(res[,3], start=c(res[1,1:2]), frequency=2)	 
-       if(useZoo) r <- as.zoo(r)
       }
     else if (tbl=="U")  
       {res <- Q(paste("SELECT date, tz, period, v FROM U ",tbNm(hV,"U",vintage[i]),
                 whereT[j], " order by date;"))
-       r   <- zoo(as.numeric(res[,4]), as.Date(res[,1]))
+       r   <- zoo::zoo(as.numeric(res[,4]), as.Date(res[,1]))
        # tz ? period is as.int(res[,3]) 	 
       }
     else if (tbl=="I")  
       {res <- Q(paste("SELECT date, v FROM ", tbNm(hV, "I", vintage[i]), 
                 whereT[j], " order by date;"))
-       r   <- zoo(as.numeric(res[,2]), as.Date(res[,1]))
+       r   <- zoo::zoo(as.numeric(res[,2]), as.Date(res[,1]))
       }
     else if (tbl=="T")  
       {res <- Q(paste("SELECT date, v FROM ", tbNm(hV, "T", vintage[i]), 
                 whereT[j], " order by date;"))
-       r   <- zoo(as.numeric(res[,2]), as.POSIXct(res[,1]))
+       r   <- zoo::zoo(as.numeric(res[,2]), as.POSIXct(res[,1]))
       }
     else stop("Specified table not found.", 
               " (Internal TSdbi or database error likely.)",
@@ -337,13 +331,12 @@ TSgetSQL <- function(serIDs, con, TSrepresentation=getOption("TSrepresentation")
     mat <- tbind(mat, r)
     } # where[j]
     } # serID[i]
+
   mat <- tfwindow(mat, tf=tf, start=start, end=end)
-  if( (!all(is.na(rp))) && !all(rp == "	" ) ) TSrefperiod(mat) <- rp      
   
-  if (! TSrepresentation  %in% c( "zoo", "default")){
-      require("tframePlus")
-      mat <- changeTSrepresentation(mat, TSrepresentation)
-      }
+  mat <- tframePlus::changeTSrepresentation(mat, TSrepresentation)
+
+  if( (!all(is.na(rp))) && !all(rp == "	" ) ) TSrefperiod(mat) <- rp      
 
   seriesNames(mat) <- names
 
@@ -403,18 +396,11 @@ TSdatesSQL <- function(serIDs, con,
   }
 
 #####################################
-# this method will generally not be needed by users, but is used in the test
-# database setup. It needs to be generic in order to work around the problem
-# that different db engines treat capitalized table names differently.
-# e.g. MySQL uses table name Meta while PostgreSQL converts to meta.
-# A default con is not used on purpose.
-
-setGeneric("dropTStable",
-   def= function(con=NULL,Table, yesIknowWhatIamDoing=FALSE)
-    standardGeneric("dropTStable"))
-
+# these methods will generally not be needed by users, but is used in the test
+# database setup. 
 
 createTSdbTables <- function(con, index=FALSE){
+ 
  Texists <- function(a){
     if(dbExistsTable(con,a)) {
         warning("table ",a," exists. Not replacing it."); return(TRUE)}
@@ -583,25 +569,31 @@ createTSdbTables <- function(con, index=FALSE){
   dbListTables(con)
   }
    
-removeTSdbTables <- function(con, yesIknowWhatIamDoing=FALSE){
+removeTSdbTables <- function(con, yesIknowWhatIamDoing=FALSE, ToLower=FALSE){
+
   if(!yesIknowWhatIamDoing) 
        stop("You need to know what you are doing before using this function!!")
-    
-  # Note: The  method "dropTStable" works around the
+   
+  # "dropTStable" works around the
   # problem that different db engines treat capitalized table names differently.
-  # e.g. MySQL uses table name Meta while Posgresql conver, yes, yesIknowWhatIamDoing=TRUEIknowWhatIamDoing=TRUEts to meta.
+  # e.g. MySQL uses table name Meta while Posgresql converts to meta.
 
-  dropTStable(con, "Meta", yesIknowWhatIamDoing=TRUE)   
-  dropTStable(con, "A", yesIknowWhatIamDoing=TRUE)
-  dropTStable(con, "B", yesIknowWhatIamDoing=TRUE)
-  dropTStable(con, "D", yesIknowWhatIamDoing=TRUE)
-  dropTStable(con, "M", yesIknowWhatIamDoing=TRUE)
-  dropTStable(con, "U", yesIknowWhatIamDoing=TRUE)
-  dropTStable(con, "Q", yesIknowWhatIamDoing=TRUE)
-  dropTStable(con, "S", yesIknowWhatIamDoing=TRUE)
-  dropTStable(con, "W", yesIknowWhatIamDoing=TRUE)
-  dropTStable(con, "I", yesIknowWhatIamDoing=TRUE)
-  dropTStable(con, "T", yesIknowWhatIamDoing=TRUE)
+  dropTStable <- function(Table){
+    if (ToLower) Table <- tolower(Table)
+    if(dbExistsTable(con, Table)) dbRemoveTable(con, Table)
+    }
+
+  dropTStable("Meta")   
+  dropTStable("A")
+  dropTStable("B")
+  dropTStable("D")
+  dropTStable("M")
+  dropTStable("U")
+  dropTStable("Q")
+  dropTStable("S")
+  dropTStable("W")
+  dropTStable("I")
+  dropTStable("T")
   invisible(TRUE)
   }
   
